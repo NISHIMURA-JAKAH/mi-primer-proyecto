@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Corazón humano de partículas</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let W, H;
+
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+
+resize();
+
+window.addEventListener("resize", resize);
+
+
+// =====================================================
+// CONFIGURACIÓN
+// =====================================================
+
+const PARTICLES = 1500;
+
+const particles = [];
+
+const PURPLE = [
+    [185, 80, 255],
+    [210, 110, 255],
+    [150, 45, 255],
+    [235, 180, 255],
+    [125, 20, 220]
+];
+
+
+// =====================================================
+// POSICIONES
+// =====================================================
+
+// Posición dispersa
+function randomPosition() {
+
+    return {
+        x: (Math.random() - 0.5) * 650,
+        y: (Math.random() - 0.5) * 600,
+        z: (Math.random() - 0.5) * 350
+    };
+
+}
+
+
+// =====================================================
+// CORAZÓN ANATÓMICO
+// =====================================================
+//
+// No es un emoji.
+// Es una silueta aproximada de corazón humano,
+// con zonas superiores y una punta inferior.
+// =====================================================
+
+function anatomicalHeart() {
+
+    const points = [];
+
+    for (let i = 0; i < 6000; i++) {
+
+        const x = (Math.random() - 0.5) * 2;
+        const y = (Math.random() - 0.5) * 2;
+
+        // Silueta principal
+        const left =
+            Math.pow(x + 0.22, 2) +
+            Math.pow(y * 0.92, 2);
+
+        const right =
+            Math.pow(x - 0.22, 2) +
+            Math.pow(y * 0.92, 2);
+
+        const lower =
+            Math.pow(x * 0.9, 2) +
+            Math.pow((y - 0.18) * 1.15, 2);
+
+        const inside =
+            left < 0.48 ||
+            right < 0.48 ||
+            lower < 0.42;
+
+        // Parte inferior más estrecha
+        const taper = y > 0.25
+            ? Math.abs(x) < (0.95 - y * 0.65)
+            : true;
+
+        if (inside && taper) {
+
+            points.push({
+                x: x * 190,
+                y: y * 245,
+                z: (Math.random() - 0.5) * 50
+            });
+
+        }
+
+    }
+
+    // Vasos superiores
+    for (let i = 0; i < 300; i++) {
+
+        const side = Math.random() > 0.5 ? 1 : -1;
+
+        points.push({
+            x: side * (35 + Math.random() * 55),
+            y: -210 - Math.random() * 100,
+            z: (Math.random() - 0.5) * 45
+        });
+
+    }
+
+    // Aorta estilizada
+    for (let i = 0; i < 180; i++) {
+
+        const a = Math.random() * Math.PI * 2;
+
+        points.push({
+            x: 65 + Math.cos(a) * 38,
+            y: -275 + Math.sin(a) * 38,
+            z: (Math.random() - 0.5) * 35
+        });
+
+    }
+
+    return points;
+}
+
+const heartPoints = anatomicalHeart();
+
+
+// =====================================================
+// ESPIRAL
+// =====================================================
+
+function spiralPosition(i, time) {
+
+    const t = i / PARTICLES;
+
+    const angle =
+        t * Math.PI * 10 +
+        time * 0.0018;
+
+    const radius =
+        20 + t * 220;
+
+    const height =
+        250 - t * 500;
+
+    let x =
+        Math.cos(angle) * radius;
+
+    let y =
+        height;
+
+    let z =
+        Math.sin(angle) * radius;
+
+    return { x, y, z };
+}
+
+
+// =====================================================
+// CREAR PARTÍCULAS
+// =====================================================
+
+for (let i = 0; i < PARTICLES; i++) {
+
+    const color =
+        PURPLE[Math.floor(Math.random() * PURPLE.length)];
+
+    particles.push({
+
+        // Posición inicial
+        ...randomPosition(),
+
+        // Objetivo corazón
+        heart: heartPoints[
+            Math.floor(
+                Math.random() * heartPoints.length
+            )
+        ],
+
+        size:
+            Math.random() * 2.2 + 0.5,
+
+        alpha:
+            Math.random() * 0.75 + 0.25,
+
+        color,
+
+        phase:
+            Math.random() * Math.PI * 2,
+
+        speed:
+            Math.random() * 1.5 + 0.5
+
+    });
+
+}
+
+
+// =====================================================
+// INTERPOLACIÓN
+// =====================================================
+
+function lerp(a, b, amount) {
+    return a + (b - a) * amount;
+}
+
+
+// =====================================================
+// EASING
+// =====================================================
+
+function easeInOut(t) {
+
+    return t < 0.5
+        ? 2 * t * t
+        : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+}
+
+
+// =====================================================
+// PROYECCIÓN 3D
+// =====================================================
+
+function project(x, y, z, tilt) {
+
+    // Rotación hacia delante
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+
+    const newY =
+        y * cos - z * sin;
+
+    const newZ =
+        y * sin + z * cos;
+
+    const perspective =
+        700 / (700 + newZ);
+
+    return {
+
+        x: W / 2 + x * perspective,
+
+        y: H * 0.45 +
+            newY * perspective,
+
+        scale: perspective
+
+    };
+
+}
+
+
+// =====================================================
+// PLATAFORMA
+// =====================================================
+
+function drawPlatform() {
+
+    const y = H * 0.82;
+
+    const width =
+        Math.min(W * 0.7, 430);
+
+    ctx.save();
+
+    ctx.shadowBlur = 40;
+
+    ctx.shadowColor =
+        "rgba(170,40,255,0.9)";
+
+    const gradient =
+        ctx.createLinearGradient(
+            W / 2 - width / 2,
+            y,
+            W / 2 + width / 2,
+            y
+        );
+
+    gradient.addColorStop(
+        0,
+        "rgba(100,0,200,0)"
+    );
+
+    gradient.addColorStop(
+        0.5,
+        "rgba(190,60,255,1)"
+    );
+
+    gradient.addColorStop(
+        1,
+        "rgba(100,0,200,0)"
+    );
+
+    ctx.fillStyle = gradient;
+
+    ctx.fillRect(
+        W / 2 - width / 2,
+        y,
+        width,
+        7
+    );
+
+    ctx.restore();
+
+
+    // Anillos debajo
+
+    for (let i = 0; i < 4; i++) {
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            W / 2,
+            y + 7,
+            70 + i * 30,
+            8 + i * 3,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.strokeStyle =
+            `rgba(190,70,255,${0.25 - i * 0.04})`;
+
+        ctx.lineWidth = 2;
+
+        ctx.stroke();
+
+    }
+
+}
+
+
+// =====================================================
+// ANIMACIÓN
+// =====================================================
+
+function animate(time) {
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.18)";
+
+    ctx.fillRect(
+        0,
+        0,
+        W,
+        H
+    );
+
+
+    // Ciclo completo
+    const cycle =
+        (time * 0.00022) % 1;
+
+
+    /*
+       FASES:
+
+       0.00 - 0.20
+       Partículas dispersas
+
+       0.20 - 0.45
+       Espiral
+
+       0.45 - 0.55
+       Espiral inclinándose
+
+       0.55 - 0.65
+       Se endereza
+
+       0.65 - 0.82
+       Forma corazón
+
+       0.82 - 0.95
+       Bombeo
+
+       0.95 - 1.00
+       Dispersión
+    */
+
+
+    let mode;
+    let progress;
+
+
+    if (cycle < 0.20) {
+
+        mode = "scatter";
+
+        progress =
+            cycle / 0.20;
+
+    }
+
+    else if (cycle < 0.45) {
+
+        mode = "spiral";
+
+        progress =
+            (cycle - 0.20) / 0.25;
+
+    }
+
+    else if (cycle < 0.55) {
+
+        mode = "lean";
+
+        progress =
+            (cycle - 0.45) / 0.10;
+
+    }
+
+    else if (cycle < 0.65) {
+
+        mode = "straight";
+
+        progress =
+            (cycle - 0.55) / 0.10;
+
+    }
+
+    else if (cycle < 0.82) {
+
+        mode = "heart";
+
+        progress =
+            (cycle - 0.65) / 0.17;
+
+    }
+
+    else if (cycle < 0.95) {
+
+        mode = "pulse";
+
+        progress =
+            (cycle - 0.82) / 0.13;
+
+    }
+
+    else {
+
+        mode = "scatter";
+
+        progress =
+            (cycle - 0.95) / 0.05;
+
+    }
+
+
+    // Plataforma
+
+    drawPlatform();
+
+
+    // =================================================
+    // PARTÍCULAS
+    // =================================================
+
+    particles.forEach((p, i) => {
+
+        let target;
+
+
+        // -----------------------------
+        // DISPERSAS
+        // -----------------------------
+
+        if (mode === "scatter") {
+
+            const random =
+                randomPosition();
+
+            target = random;
+
+        }
+
+
+        // -----------------------------
+        // ESPIRAL
+        // -----------------------------
+
+        else if (
+            mode === "spiral" ||
+            mode === "lean" ||
+            mode === "straight"
+        ) {
+
+            target =
+                spiralPosition(i, time);
+
+        }
+
+
+        // -----------------------------
+        // CORAZÓN
+        // -----------------------------
+
+        else {
+
+            target = {
+
+                x: p.heart.x,
+
+                y: p.heart.y,
+
+                z: p.heart.z
+
+            };
+
+        }
+
+
+        let amount;
+
+
+        if (mode === "scatter") {
+
+            amount =
+                progress < 0.5
+                    ? 1
+                    : 0.7;
+
+        }
+
+        else if (mode === "spiral") {
+
+            amount =
+                easeInOut(progress);
+
+        }
+
+        else if (
+            mode === "lean" ||
+            mode === "straight"
+        ) {
+
+            amount = 1;
+
+        }
+
+        else {
+
+            amount =
+                easeInOut(progress);
+
+        }
+
+
+        // Movimiento hacia el objetivo
+
+        p.x =
+            lerp(
+                p.x,
+                target.x,
+                0.035 + amount * 0.025
+            );
+
+        p.y =
+            lerp(
+                p.y,
+                target.y,
+                0.035 + amount * 0.025
+            );
+
+        p.z =
+            lerp(
+                p.z,
+                target.z,
+                0.035 + amount * 0.025
+            );
+
+
+        // =================================================
+        // INCLINACIÓN
+        // =================================================
+
+        let tilt = 0;
+
+
+        if (mode === "lean") {
+
+            // Se inclina hacia delante
+
+            tilt =
+                easeInOut(progress)
+                * 0.75;
+
+        }
+
+
+        if (mode === "straight") {
+
+            // Vuelve a su posición normal
+
+            tilt =
+                0.75 *
+                (1 - easeInOut(progress));
+
+        }
+
+
+        // =================================================
+        // BOMBEAR
+        // =================================================
+
+        let pulse = 1;
+
+
+        if (mode === "pulse") {
+
+            /*
+              Expansión y contracción
+              como un latido.
+            */
+
+            const beat =
+                Math.sin(
+                    progress *
+                    Math.PI *
+                    4
+                );
+
+            pulse =
+                1 +
+                beat * 0.055;
+
+        }
+
+
+        const projected =
+            project(
+                p.x * pulse,
+                p.y * pulse,
+                p.z,
+                tilt
+            );
+
+
+        // =================================================
+        // DIBUJAR
+        // =================================================
+
+        const [r, g, b] =
+            p.color;
+
+
+        ctx.beginPath();
+
+
+        ctx.fillStyle =
+            `rgba(${r},${g},${b},${p.alpha})`;
+
+
+        ctx.shadowBlur =
+            10;
+
+
+        ctx.shadowColor =
+            `rgb(${r},${g},${b})`;
+
+
+        ctx.arc(
+
+            projected.x,
+
+            projected.y,
+
+            p.size *
+            projected.scale,
+
+            0,
+
+            Math.PI * 2
+
+        );
+
+
+        ctx.fill();
+
+    });
+
+
+    requestAnimationFrame(animate);
+
+}
+
+
+requestAnimationFrame(animate);
+
+</script>
+
+</body>
+</html>
